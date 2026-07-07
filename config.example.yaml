@@ -1,0 +1,89 @@
+# DataHub_health 运行配置示例（敏感信息不要进代码/不要提交真实值）
+#
+# 用法：
+#   cp config.example.yaml config.yaml   # config.yaml 已被 .gitignore 忽略
+#   # 填入真实地址/凭证后启动
+#   go run ./cmd/relay
+#
+# 也可用环境变量 CONFIG_FILE 指定其它路径：CONFIG_FILE=/etc/datahub/config.yaml
+#
+# 各版本 (hlt) 对外接口完全一致，仅靠路由名区分：
+#   POST /v1/openapi/zlx/querySrmxHLT
+#   GET  /v1/openapi/zlx/quotaHLT
+# 存储按「域」划分：每个域独占一套 DB + Redis 逻辑库；本服务域名即路由名 (hlt)。
+# 跨域使用 license 一律鉴权失败。启动时会做防呆校验：两个不同的域配置同一个数据库
+# 或同一个 Redis 逻辑库将直接拒绝启动。每条路由各自对接独立上游。
+# hlt 转接「商保电子凭证智能服务平台-个人健康评测」(博思云易) 上游：
+# appid/data(BASE64)/noise/sign(MD5 大写)/version 信封，两步调用
+# （100101001 个人授权备案 -> 700101001 个人健康评测）。
+#
+# 注：durations 支持 Go 风格字符串，如 4s / 10s / 5m / 8h。
+
+# HTTP 服务监听地址
+addr: ":8080"
+
+upstream:
+  # 所有版本共用的上游调用超时（hlt 单次查询含两步上游调用，勿设太小）
+  timeout: "8s"
+
+billing:
+  requeryInterval: "10s"   # PENDING 复查间隔
+
+admin:
+  # 后台统一登录账号 + JWT（控制面 = hlt 版本库）
+  bootstrapUser: "admin"
+  bootstrapPass: "REPLACE_WITH_ADMIN_PASSWORD"
+  jwtSecret: "REPLACE_WITH_ADMIN_JWT_SECRET"
+  tokenTTL: "8h"
+  spaDir: "web/admin/dist"
+
+# 开发期预置 demo license 的绑定 secret（生产由管理后台为每个用户生成）
+demo:
+  appSecret: "REPLACE_WITH_DEMO_APP_SECRET"
+  seed: false               # 默认 false：不在 postgres 启动时注入 demo license（0004 迁移已从生产清除 demo）；开发/演示可设 true，e2e 由建库脚本 SEED_DEMO=1 播种
+
+# 存储后端 (DESIGN §11): memory（开发/默认）| postgres（生产，每个域独立 PG + Redis）。
+storage:
+  driver: "memory"          # memory | postgres
+  migrationsDir: "migrations"
+
+# PostgreSQL / Redis 全实例共用凭证（填 RDS 高权限账号，阿里云即 pg_rds_superuser 成员；
+# 可 CREATE DATABASE + DDL。admin.bootstrapUser 是网页后台，不是 PG 账号）。
+pg_base: &pg_base
+  host: "REPLACE_WITH_PG_HOST"
+  port: 5432
+  user: "REPLACE_WITH_PG_ADMIN_USER"
+  password: "REPLACE_WITH_PG_ADMIN_PASSWORD"
+  sslmode: "disable"
+  maxConns: 10
+
+redis_base: &redis_base
+  addr: "REPLACE_WITH_REDIS_HOST:6379"
+  username: "REPLACE_WITH_REDIS_ADMIN_USER"
+  password: "REPLACE_WITH_REDIS_ADMIN_PASSWORD"
+  poolSize: 10
+
+# 按路由配置上游；存储按「域」装配：每个域用其 owner 路由的 database/redis 开库。
+# 本服务域 owner：hlt→hlt。memory 模式下 database/redis 可全省略。
+versions:
+  hlt:
+    upstream:
+      kind: "health"        # hlt 对接商保电子凭证智能服务平台-个人健康评测（博思云易）
+      baseURL: "REPLACE_WITH_HLT_UPSTREAM_BASE_URL"   # 如 https://{ip}:{port}/ciras-rest/ins-cl
+      appId: "REPLACE_WITH_HLT_UPSTREAM_APP_ID"       # 平台分配的应用帐号 appid
+      key: "REPLACE_WITH_HLT_UPSTREAM_KEY"            # appid 对应的签名密钥 key
+      # apiVersion: "2.0"           # 可省，默认 2.0（BASE64+MD5；3.0 国密未实现）
+      claimCompanyCode: "REPLACE_WITH_CLAIM_COMPANY_CODE"   # 保险公司代码（统一社会信用代码）
+      claimCompanyName: "REPLACE_WITH_CLAIM_COMPANY_NAME"   # 保险公司名称
+      # busType: "2"                # 可省，默认 2（1:理赔 2:核保 3:其他）
+      authFileUrl: "REPLACE_WITH_AUTH_FILE_URL"       # 授权文件下载地址（平台要求授权文件/地址二选一）
+      # authFileType: "pdf"         # 可省，默认 pdf
+      # authPath: "/100101001"      # 可省，个人授权备案接口路径
+      # assessPath: "/700101001"    # 可省，个人健康评测接口路径
+      # assessTypes: "1"            # 可省，默认 1（风险疾病分类）
+    database:
+      <<: *pg_base
+      name: "datahub_hlt_db"
+    redis:
+      <<: *redis_base
+      db: 0

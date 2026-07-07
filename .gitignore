@@ -1,0 +1,33 @@
+# Go build artifacts
+relay.exe
+*.exe
+*.exe~
+*.out
+*~
+
+# Runtime logs
+relay.log
+relay.err
+*.log
+
+# Admin SPA build/deps
+web/admin/node_modules/
+web/admin/dist/
+
+# Local runtime config with secrets (use config.example.yaml as template)
+config.yaml
+config.local.yaml
+config.local*.yaml
+config.e2e.yaml
+config.aliyun*.yaml
+config.gama.real.yaml
+
+# Test suite result output (dated subdirs: test_res/YYYY-MM-DD/)
+test_res/
+
+# Browser-saved pages (often embed third-party secrets / huge asset folders)
+docs/*_files/
+docs/租赁分*
+
+# Accidental local build/copy artifacts
+tmp-*.js
