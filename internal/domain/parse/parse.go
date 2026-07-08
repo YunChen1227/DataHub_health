@@ -1,6 +1,7 @@
 // Package parse validates and normalises the client request into a normalized
-// upstream request shape (接口文档-经济能力.doc §3.1.3: mobile/idCard 必填, name
-// 选填). The provider-specific verify/sign is filled later by the upstream client.
+// upstream request shape. hlt 上游（商保电子凭证平台）的个人授权备案要求
+// mobile/idCard/name 三者必填——网关校验口径与上游要求一致，前置拦截而非
+// 透传给上游报错（对外手册承诺"参数非法不调用上游、不计费"）。
 package parse
 
 import (
@@ -25,7 +26,7 @@ func Parse(cmd *model.QueryCommand) (*model.UpstreamRequest, error) {
 	if cmd == nil {
 		return nil, errs.New(errs.BusiDataRequestErr, "请求体为空")
 	}
-	name := strings.TrimSpace(cmd.Name) // 选填
+	name := strings.TrimSpace(cmd.Name) // hlt 上游授权备案必填
 	mobile := strings.TrimSpace(cmd.Mobile)
 	idCard := strings.ToUpper(strings.TrimSpace(cmd.IDCard))
 
@@ -34,6 +35,9 @@ func Parse(cmd *model.QueryCommand) (*model.UpstreamRequest, error) {
 	}
 	if !idCardRe.MatchString(idCard) {
 		return nil, errs.New(errs.BusiDataRequestErr, "idCard 格式非法")
+	}
+	if name == "" {
+		return nil, errs.New(errs.BusiDataRequestErr, "name 不能为空")
 	}
 
 	return &model.UpstreamRequest{
